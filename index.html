@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Мини квест</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>❤️</text></svg>">
+    <style>
+        :root {
+            --accent: #ff4d6d;
+            --bg-white: #ffffff;
+            --text-dark: #333;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: 'Arial', sans-serif;
+            background: var(--bg-white);
+            overflow: hidden; /* Чтобы не было прокрутки во время анимаций */
+        }
+
+        /* Анимированный фон */
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .floating-heart {
+            position: absolute;
+            color: #ff4d6d;
+            opacity: 0.6;
+            animation: move linear infinite;
+        }
+
+        @keyframes move {
+            0% { transform: translateY(110vh) rotate(0deg); }
+            100% { transform: translateY(-10vh) rotate(360deg); }
+        }
+
+        /* Контейнеры */
+        .screen {
+            position: relative;
+            z-index: 10;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            width: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            text-align: center;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        #start-screen { display: flex; }
+
+        /* Фотография на главном экране */
+        .main-photo-wrapper {
+            position: relative;
+            width: 280px;
+            height: 280px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            overflow: hidden;
+            border: 5px solid white;
+        }
+
+        .main-photo-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .btn-start {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(255, 77, 109, 0.4);
+            transition: transform 0.2s;
+        }
+
+        .btn-start:active { transform: translate(-50%, -50%) scale(0.9); }
+
+        /* Стили теста */
+        .q-img {
+            width: 100%;
+            max-width: 320px;
+            height: 200px;
+            border-radius: 15px;
+            object-fit: cover;
+            margin: 20px 0;
+        }
+
+        .options-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+            max-width: 300px;
+        }
+
+        .opt-btn {
+            background: white;
+            border: 2px solid var(--accent);
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        /* Оверлей фидбека */
+        #overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.95);
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .emoji-anim { font-size: 80px; margin-bottom: 20px; }
+        .feedback-msg { font-size: 24px; font-weight: bold; color: var(--text-dark); }
+
+        /* Результат */
+        .result-circle {
+            width: 150px;
+    ght: 150px;
+            background: var(--accent);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="bg-canvas"></div>
+
+    <div class="screen" id="start-screen">
+        <div class="main-photo-wrapper">
+            <img src="/картинки/1.jpg" alt="Главное фото">
+            <button class="btn-start" onclick="startQuiz()">НАЧАТЬ ТЕСТ</button>
+        </div>
+    </div>
+
+    <div class="screen" id="quiz-screen">
+        <div id="progress">Вопрос 1 из 10</div>
+        <h2 id="q-text">Текст вопроса</h2>
+        <img id="q-img" class="q-img" src="" alt="Фото вопроса">
+        <div class="options-list" id="options"></div>
+    </div>
+
+    <div class="screen" id="result-screen">
+        <h1>Твой результат:</h1>
+        <div class="result-circle" id="final-score">0%</div>
+        <p id="final-comment"></p>
+        <button class="opt-btn" onclick="location.reload()">Пройти еще раз</button>
+    </div>
+
+    <div id="overlay">
+        <div class="emoji-anim" id="emoji"></div>
+        <div class="feedback-msg" id="msg"></div>
+    </div>
+
+    <script>
+        // 1. ДАННЫЕ ТЕСТА (Замени тексты и ссылки на свои)
+        const quizData = [
+            {
+                q: "Какая дата нашей годовщины?",
+                img: "/картинки/2.jpg",
+                options: ["25.12.2024", "12.11.2024", "25.11.2024"],
+                correct: 0
+            },
+            {
+                q: "Куда мы пошли на первом свидании?",
+                img: "/картинки/3.jpg",
+                options: ["Небыло первого свидания", "Просто гуляли", "Катались на коньках"],
+                correct: 2
+            },
+            {
+                q: "Каким был твой первый подарок для меня?",
+                img: "/картинки/4.jpg",
+                options: ["Цветы", "Электронка", "Украшения"],
+                correct: 1
+            },
+            {
+                q: "Почему я хочу быть только с тобой?",
+                img: "/картинки/5.jpg",
+                options: ["Я делаю тебя счастивой", "Я тебя обеспечиваю", "Тебе со мной удобно"],
+                correct: 0
+            },
+            {
+                q: "Что я ценю в тебе больше всего?",
+                img: "/картинки/5.jpg",
+                options: ["Мужественность, заботу", "Доброту,нежность", "Всё перечисленное"],
+                correct: 2
+            },
+             {
+                q: "Как думаешь, какая песня у меня ассоциируется с тобой?",
+                img: "/картинки/8.jpg",
+                options: ["Пацан с района - Тайпан", "Вечно молодой - ГРАНЖ", "Love Again - Xolidayboy"],
+                correct: 2
+            },
+             {
+                q: "Что меня может успокоить?",
+                img: "/картинки/6.jpg",
+                options: ["Если я скажу 'Не реви'", "Мои объятия и поцелуи", "Алкоголь"],
+                correct: 1
+            },
+             {
+                q: "Что меня возбуждает в тебе?",
+                img: "/картинки/7.jpg",
+                options: ["Голос и прикосновения", "Тело и движения", "Обнимашки"],
+                correct: 0
+            },
+             {
+                q: "Чего мне не хватает для полного счастья?",
+                img: "/картинки/9.jpg",
+                options: ["Меня рядом", "Денег", "Тусовок"],
+                correct: 0
+            },
+             {
+                q: "У нас всё будет хорошо и мы всё преодолеем?",
+                img: "/картинки/10.jpg",
+                options: ["Не знаю", "Сомневаюсь", "Иного исхода не дано"],
+                correct: 2
+            },
+        ];
+
+        let currentQ = 0;
+        let score = 0;
+
+        // Генерация сердечек на фоне
+        function initHearts() {
+            const bg = document.getElementById('bg-canvas');
+            for(let i=0; i<15; i++) {
+                const h = document.createElement('div');
+                h.className = 'floating-heart';
+                h.innerText = '❤️';
+                h.style.left = Math.random() * 100 + 'vw';
+                h.style.fontSize = (Math.random() * 20 + 10) + 'px';
+                h.style.animationDuration = (Math.random() * 3 + 4) + 's';
+                h.style.animationDelay = Math.random() * 5 + 's';
+                bg.appendChild(h);
+            }
+        }
+        initHearts();
+
+        // Запуск теста
+        function startQuiz() {
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('quiz-screen').style.display = 'flex';
+            renderQuestion();
+        }
+
+        function renderQuestion() {
+            const data = quizData[currentQ];
+            document.getElementById('progress').innerText = `Вопрос ${currentQ + 1} из 10`;
+            document.getElementById('q-text').innerText = data.q;
+            document.getElementById('q-img').src = data.img;
+            
+            const optionsDiv = document.getElementById('options');
+            optionsDiv.innerHTML = '';
+            
+            data.options.forEach((opt, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'opt-btn';
+                btn.innerText = opt;
+                btn.onclick = () => handleAnswer(index);
+                optionsDiv.appendChild(btn);
+            });
+        }
+
+        function handleAnswer(idx) {
+            const isCorrect = idx === quizData[currentQ].correct;
+            if(isCorrect) score++;
+
+            showFeedback(isCorrect);
+
+            setTimeout(() => {
+                document.getElementById('overlay').style.display = 'none';
+                currentQ++;
+                if(currentQ < 10) {
+                    renderQuestion();
+                } else {
+                    showFinalResult();
+                }
+            }, 2000);
+        }
+
+        function showFeedback(isCorrect) {
+            const overlay = document.getElementById('overlay');
+            const emoji = document.getElementById('emoji');
+            const msg = document.getElementById('msg');
+            
+            overlay.style.display = 'flex';
+            
+            if(isCorrect) {
+                emoji.innerText = '❤️✨🌟';
+                msg.innerText = 'Умничка!';
+                msg.style.color = '#2ecc71';
+            } else {
+                emoji.innerText = '😔⛈️💔';
+                msg.innerText = 'Подумай еще раз...';
+                msg.style.color = '#e74c3c';
+            }
+        }
+
+        function showFinalResult() {
+            document.getElementById('quiz-screen').style.display = 'none';
+            document.getElementById('result-screen').style.display = 'flex';
+            
+            const percent = (score / 10) * 100;
+            document.getElementById('final-score').innerText = percent + '%';
+            
+            const comment = document.getElementById('final-comment');
+            if(percent === 100) comment.innerText = "Идеально! Ты знаешь меня на все сто! ❤️";
+            else if(percent >= 70) comment.innerText = "Отличный результат! Мы очень близки. 😊";
+            else comment.innerText = "Неплохо, но нам нужно чаще болтать по душам! 😉";
+        }
+    </script>
+</body>
+</html>
